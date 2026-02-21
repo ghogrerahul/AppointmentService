@@ -1,19 +1,15 @@
-FROM node:18-alpine
-
+FROM node:18-alpine AS builder
 WORKDIR /app
-RUN apk add --no-cache dumb-init
-
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci --production
+COPY . .
 
-COPY src ./src
-COPY .sequelizerc ./
-
-RUN mkdir -p logs
+FROM node:18-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app .
 EXPOSE 3002
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3002/api/v1/health', (res) => { if (res.statusCode !== 200) throw new Error(res.statusCode) })"
-
-ENTRYPOINT ["dumb-init", "--"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:3002/api/v1/health || exit 1
 CMD ["node", "src/index.js"]
